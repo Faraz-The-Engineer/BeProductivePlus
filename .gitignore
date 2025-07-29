@@ -1,0 +1,16 @@
+# Node modules and logs
+node_modules/
+*.log
+
+# dotenv
+.env
+
+# Zip or build artifacts
+*.zip
+
+# OS and editor junk
+.DS_Store
+Thumbs.db
+
+# Optional: VSCode
+.vscode/
