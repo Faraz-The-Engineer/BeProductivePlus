@@ -7,12 +7,7 @@ const router = express.Router();
 // Create Task
 router.post('/', auth, async (req, res) => {
   try {
-    const { name, timeEstimate, dependency, priority, steps, date } = req.body;
-    
-    // Debug logging
-    console.log('Creating task with data:', { name, timeEstimate, dependency, priority, steps, date });
-    console.log('Steps type:', typeof steps);
-    console.log('Steps length:', steps ? steps.length : 'undefined');
+    const { name, timeEstimate, dependency, priority, onHoldReason, steps, date } = req.body;
     
     // Calculate progress percentage
     let progressPercentage = 0;
@@ -28,6 +23,7 @@ router.post('/', auth, async (req, res) => {
       timeEstimate,
       dependency,
       priority,
+      onHoldReason,
       date: date || new Date().toISOString().slice(0, 10), // Use provided date or default to today
       steps: Array.isArray(steps) ? steps : [],
       progressPercentage,
@@ -44,13 +40,8 @@ router.post('/', auth, async (req, res) => {
       }
     }
     
-    console.log('Final task data:', taskData);
-    
     const task = new Task(taskData);
     await task.save();
-    
-    console.log('Task saved successfully:', task);
-    console.log('Task steps after save:', task.steps);
     
     res.status(201).json(task);
   } catch (err) {
@@ -76,7 +67,7 @@ router.get('/', auth, async (req, res) => {
 // Update task
 router.put('/:id', auth, async (req, res) => {
   try {
-    const { name, timeEstimate, dependency, priority, status, date } = req.body;
+    const { name, timeEstimate, dependency, priority, status, onHoldReason, date } = req.body;
     
     // Get current task to check if date is being changed
     const currentTask = await Task.findOne({ _id: req.params.id, user: req.user.userId });
@@ -102,6 +93,7 @@ router.put('/:id', auth, async (req, res) => {
       dependency, 
       priority, 
       status, 
+      onHoldReason,
       date,
       progressPercentage,
       moveCount

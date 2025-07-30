@@ -12,7 +12,8 @@ const taskSchema = new mongoose.Schema({
   timeEstimate: { type: Number, required: true }, // in minutes or hours
   dependency: { type: String },
   priority: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Medium' },
-  status: { type: String, enum: ['Pending', 'In Progress', 'Completed'], default: 'Pending' },
+  status: { type: String, enum: ['Pending', 'In Progress', 'Completed', 'On Hold'], default: 'Pending' },
+  onHoldReason: { type: String },
   date: { type: String, required: true, default: () => new Date().toISOString().slice(0, 10) },
   steps: [stepSchema],
   progressPercentage: { type: Number, default: 0, min: 0, max: 100 },
