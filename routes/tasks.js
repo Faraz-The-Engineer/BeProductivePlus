@@ -54,6 +54,96 @@ router.post('/', auth, async (req, res) => {
   }
 });
 
+// Bulk Create Tasks
+router.post('/bulk', auth, async (req, res) => {
+  try {
+    const { tasks, rawText, defaultTimeEstimate = 30, defaultPriority = 'Medium', defaultDate } = req.body;
+    
+    let tasksToCreate = [];
+    
+    // If raw text is provided, parse it into tasks
+    if (rawText && rawText.trim()) {
+      const lines = rawText.split('\n').filter(line => line.trim());
+      tasksToCreate = lines.map(line => {
+        const trimmedLine = line.trim();
+        // Try to extract time estimate from the line (e.g., "Task name (30min)" or "Task name - 30")
+        const timeMatch = trimmedLine.match(/\((\d+)\s*(?:min|minutes?|h|hours?)\)|-\s*(\d+)\s*(?:min|minutes?|h|hours?)$/i);
+        let timeEstimate = defaultTimeEstimate;
+        let taskName = trimmedLine;
+        
+        if (timeMatch) {
+          const timeValue = parseInt(timeMatch[1] || timeMatch[2]);
+          if (timeValue) {
+            timeEstimate = timeValue;
+            // Remove the time part from the task name
+            taskName = trimmedLine.replace(/\((\d+)\s*(?:min|minutes?|h|hours?)\)|-\s*(\d+)\s*(?:min|minutes?|h|hours?)$/i, '').trim();
+          }
+        }
+        
+        // Try to extract priority from the line (e.g., "[HIGH]", "[LOW]", "[MEDIUM]")
+        const priorityMatch = taskName.match(/\[(HIGH|MEDIUM|LOW)\]/i);
+        let priority = defaultPriority;
+        
+        if (priorityMatch) {
+          priority = priorityMatch[1].toUpperCase();
+          // Remove the priority part from the task name
+          taskName = taskName.replace(/\[(HIGH|MEDIUM|LOW)\]/i, '').trim();
+        }
+        
+        return {
+          name: taskName,
+          timeEstimate,
+          priority,
+          status: 'Pending',
+          date: defaultDate || new Date().toISOString().slice(0, 10),
+          steps: [],
+          progressPercentage: 0,
+          moveCount: 0,
+        };
+      });
+    } else if (Array.isArray(tasks)) {
+      // If tasks array is provided, use it directly
+      tasksToCreate = tasks.map(task => ({
+        name: task.name,
+        timeEstimate: task.timeEstimate || defaultTimeEstimate,
+        priority: task.priority || defaultPriority,
+        status: task.status || 'Pending',
+        dependency: task.dependency || '',
+        onHoldReason: task.onHoldReason || '',
+        date: task.date || defaultDate || new Date().toISOString().slice(0, 10),
+        steps: Array.isArray(task.steps) ? task.steps : [],
+        progressPercentage: 0,
+        moveCount: 0,
+      }));
+    } else {
+      return res.status(400).json({ message: 'Either tasks array or rawText must be provided' });
+    }
+    
+    // Validate that we have tasks to create
+    if (tasksToCreate.length === 0) {
+      return res.status(400).json({ message: 'No valid tasks to create' });
+    }
+    
+    // Add user ID to all tasks
+    const tasksWithUser = tasksToCreate.map(task => ({
+      ...task,
+      user: req.user.userId,
+    }));
+    
+    // Create all tasks
+    const createdTasks = await Task.insertMany(tasksWithUser);
+    
+    res.status(201).json({
+      message: `Successfully created ${createdTasks.length} tasks`,
+      tasks: createdTasks,
+      count: createdTasks.length
+    });
+  } catch (err) {
+    console.error('Error creating bulk tasks:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 // Get all tasks for user
 router.get('/', auth, async (req, res) => {
   try {
