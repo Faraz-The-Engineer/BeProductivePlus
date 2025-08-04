@@ -343,4 +343,193 @@ router.delete('/:id/steps/:stepIdx', auth, async (req, res) => {
   }
 });
 
+// Start timer for a task
+router.post('/:id/timer/start', auth, async (req, res) => {
+  try {
+    const task = await Task.findOne({ _id: req.params.id, user: req.user.userId });
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    // Stop any existing active timer
+    if (task.isTimerActive && task.timerStartTime) {
+      const duration = Math.round((new Date() - task.timerStartTime) / 60000);
+      task.timeLogs.push({
+        startTime: task.timerStartTime,
+        endTime: new Date(),
+        duration,
+        isActive: false,
+      });
+      task.totalTimeSpent = (task.totalTimeSpent || 0) + duration;
+    }
+
+    // Start new timer
+    task.isTimerActive = true;
+    task.timerStartTime = new Date();
+    task.status = 'In Progress';
+
+    await task.save();
+    res.json(task);
+  } catch (err) {
+    console.error('Error starting timer:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Stop timer for a task
+router.post('/:id/timer/stop', auth, async (req, res) => {
+  try {
+    const task = await Task.findOne({ _id: req.params.id, user: req.user.userId });
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    if (!task.isTimerActive || !task.timerStartTime) {
+      return res.status(400).json({ message: 'Timer is not active' });
+    }
+
+    const duration = Math.round((new Date() - task.timerStartTime) / 60000);
+    const { description } = req.body;
+
+    // Add time log entry
+    task.timeLogs.push({
+      startTime: task.timerStartTime,
+      endTime: new Date(),
+      duration,
+      description: description || '',
+      isActive: false,
+    });
+
+    // Update totals
+    task.totalTimeSpent = (task.totalTimeSpent || 0) + duration;
+    task.isTimerActive = false;
+    task.timerStartTime = null;
+
+    await task.save();
+    res.json(task);
+  } catch (err) {
+    console.error('Error stopping timer:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get time tracking report for a task
+router.get('/:id/time-report', auth, async (req, res) => {
+  try {
+    const task = await Task.findOne({ _id: req.params.id, user: req.user.userId });
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    const report = {
+      taskName: task.name,
+      timeEstimate: task.timeEstimate,
+      totalTimeSpent: task.totalTimeSpent || 0,
+      efficiency: task.timeEstimate > 0 ? ((task.timeEstimate / (task.totalTimeSpent || 1)) * 100).toFixed(1) : 0,
+      timeLogs: task.timeLogs.map(log => ({
+        startTime: log.startTime,
+        endTime: log.endTime,
+        duration: log.duration,
+        description: log.description,
+        date: log.startTime.toISOString().slice(0, 10),
+      })),
+      isTimerActive: task.isTimerActive,
+      timerStartTime: task.timerStartTime,
+    };
+
+    res.json(report);
+  } catch (err) {
+    console.error('Error getting time report:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Add manual time log
+router.post('/:id/time-log', auth, async (req, res) => {
+  try {
+    const task = await Task.findOne({ _id: req.params.id, user: req.user.userId });
+    
+    if (!task) {
+      return res.status(404).json({ message: 'Task not found' });
+    }
+
+    const { duration, description, date } = req.body;
+    
+    if (!duration || duration <= 0) {
+      return res.status(400).json({ message: 'Valid duration is required' });
+    }
+
+    const logDate = date ? new Date(date) : new Date();
+    
+    task.timeLogs.push({
+      startTime: logDate,
+      endTime: new Date(logDate.getTime() + duration * 60000),
+      duration: parseInt(duration),
+      description: description || '',
+      isActive: false,
+    });
+
+    task.totalTimeSpent = (task.totalTimeSpent || 0) + parseInt(duration);
+
+    await task.save();
+    res.json(task);
+  } catch (err) {
+    console.error('Error adding time log:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get all tasks with time tracking data for reports
+router.get('/time-tracking/summary', auth, async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    let query = { user: req.user.userId };
+
+    // Add date filter if provided
+    if (startDate && endDate) {
+      query.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    }
+
+    const tasks = await Task.find(query).sort({ updatedAt: -1 });
+
+    const summary = {
+      totalTasks: tasks.length,
+      totalTimeEstimated: tasks.reduce((sum, task) => sum + (task.timeEstimate || 0), 0),
+      totalTimeSpent: tasks.reduce((sum, task) => sum + (task.totalTimeSpent || 0), 0),
+      tasksWithTimeTracking: tasks.filter(task => task.totalTimeSpent > 0).length,
+      activeTimers: tasks.filter(task => task.isTimerActive).length,
+      averageEfficiency: tasks.length > 0 ? 
+        tasks.reduce((sum, task) => {
+          const efficiency = task.timeEstimate > 0 && task.totalTimeSpent > 0 
+            ? (task.timeEstimate / task.totalTimeSpent) * 100 
+            : 0;
+          return sum + efficiency;
+        }, 0) / tasks.length : 0,
+      taskBreakdown: tasks.map(task => ({
+        id: task._id,
+        name: task.name,
+        timeEstimate: task.timeEstimate,
+        totalTimeSpent: task.totalTimeSpent || 0,
+        efficiency: task.timeEstimate > 0 && task.totalTimeSpent > 0 
+          ? ((task.timeEstimate / task.totalTimeSpent) * 100).toFixed(1) 
+          : 0,
+        status: task.status,
+        isTimerActive: task.isTimerActive,
+        timerStartTime: task.timerStartTime,
+      })),
+    };
+
+    res.json(summary);
+  } catch (err) {
+    console.error('Error getting time tracking summary:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router; 

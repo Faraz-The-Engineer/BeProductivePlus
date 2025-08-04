@@ -23,9 +23,11 @@ mongoose.connect('mongodb+srv://sabdulfaraz:90D9f725depZ4WrY@cluster0.kkhwurj.mo
 
 const authRoutes = require('./routes/auth');
 const taskRoutes = require('./routes/tasks');
+const templateRoutes = require('./routes/templates');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/templates', templateRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
