@@ -17,6 +17,29 @@ router.post('/signup', async (req, res) => {
       });
     }
     
+    // Validate API key from headers
+    const apiKey = req.headers['x-api-key'];
+    const validApiKey = "i8v$f]3%^uvf=<=x]xR^yKbM:}GXZov:O00t76pV$*?JzQk,U]}Ag|N][F@%B%Qp";
+    
+    if (!validApiKey) {
+      console.error('SIGNUP_API_KEY environment variable is not set');
+      return res.status(500).json({ 
+        message: 'Server configuration error' 
+      });
+    }
+    
+    if (!apiKey) {
+      return res.status(401).json({ 
+        message: 'API key is required in headers (x-api-key)' 
+      });
+    }
+    
+    if (apiKey !== validApiKey) {
+      return res.status(401).json({ 
+        message: 'Invalid API key' 
+      });
+    }
+    
     // Check if user already exists
     const existingUser = await User.findOne({ email: email.toLowerCase() });
     if (existingUser) {

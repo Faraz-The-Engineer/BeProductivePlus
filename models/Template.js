@@ -22,4 +22,4 @@ templateSchema.index({ user: 1, name: 1 });
 templateSchema.index({ category: 1, isPublic: 1 });
 templateSchema.index({ tags: 1 });
 
-module.exports = mongoose.model('Template', templateSchema);
+module.exports = mongoose.model('Template', templateSchema); 
